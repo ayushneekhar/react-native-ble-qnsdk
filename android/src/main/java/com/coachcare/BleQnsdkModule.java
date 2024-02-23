@@ -58,19 +58,144 @@ import java.util.List;
 
 public class BleQnsdkModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
 
+  private final String TAG=BleQnsdkModule.class.getSimpleName();
+
+  private final Context mContext;
   private final ReactApplicationContext reactContext;
   private QNBleApi mQNBleApi;
   public User mUser = new User();
   private boolean loaded = false;
   public static final String FORMAT_SHORT = "yyyy-MM-dd";
 
+  public void EmitData(double weight) {
+    if (eventContext != null) {
+
+      eventContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+              .emit("onStop", weight);
+    }
+  }
+
+
+  void emitResult(QNBleDevice qnBleDevice, QNScaleData qnScaleData) {
+    try {
+      BleScaleData scaleData = qnScaleData.getBleScaleData();
+      // resultObj = new JSONObject();
+      WritableMap resultObj = Arguments.createMap();
+
+
+      resultObj.putDouble("body_bmi", scaleData.getBmi());
+      resultObj.putDouble("body_bmr", scaleData.getBmr());
+      resultObj.putDouble("body_fat_ratio", scaleData.getBodyfat());
+      resultObj.putDouble("body_muscle", scaleData.getMuscle());
+      resultObj.putDouble("body_fat_sub", scaleData.getSubfat());
+      resultObj.putDouble("muscle_weight", scaleData.getMuscleMass());
+      resultObj.putDouble("bone_mass", scaleData.getBone());
+      resultObj.putDouble("water_content", scaleData.getWater());
+      resultObj.putDouble("body_weight", scaleData.getWeight());
+      resultObj.putDouble("protein", scaleData.getProtein());
+      resultObj.putDouble("metabolic_age", scaleData.getBodyAge());
+      Log.d("scale_data", scaleData.toString());
+
+
+      sendEventToJS("onHealthData", resultObj);
+    } catch (Exception error) {
+      error.printStackTrace();
+      Log.d(TAG, "Final Result Object ERROR : > " + error.getMessage());
+
+    }
+  }
 
   public BleQnsdkModule(ReactApplicationContext reactContext) {
-
     super(reactContext);
+    this.mContext = reactContext.getApplicationContext();
+    this.eventContext = reactContext;
+    mQNBleApi = QNBleApi.getInstance(this.mContext);
+    initBleConnectStatus();
+    mQNBleApi.setDataListener(new QNScaleDataListener() {
+      @Override
+      public void onGetUnsteadyWeight(QNBleDevice device, double weight) {
+        Log.d(TAG, initWeight(weight));
+        EmitData(weight);
+      }
 
-    reactContext.addLifecycleEventListener(this);
-    this.reactContext = reactContext;
+      @Override
+      public void onGetScaleData(QNBleDevice device, QNScaleData data) {
+        emitResult(device, data);
+        Log.d(TAG, "收到测量数据");
+        Log.d(TAG, initScaleDate(data));
+        Log.d(TAG, data.toString());
+        data.getItemValue(QNIndicator.TYPE_WEIGHT);
+        Log.d(TAG, "enter onGetScaleData>>>" + data.getBleScaleData().toString());
+        Log.d(TAG, "enter onGetScaleData BMI >>>" + data.getBleScaleData().getBmi());
+        Log.d(TAG, "enter onGetScaleData Body FAT >>>" + data.getBleScaleData().getBodyfat());
+        Log.d(TAG, "enter onGetScaleData Body getBmr >>>" + data.getBleScaleData().getBmr());
+
+
+        // Log.d("scale_dataaaaaa", data.getItemValue(QNIndicator.TYPE_WEIGHT).toString());
+        // emit
+        // EmitHealthData(data);
+
+      }
+
+      @Override
+      public void onGetStoredScale(QNBleDevice device, List<QNScaleStoreData> storedDataList) {
+        Log.d("ConnectActivity", "收到存储数据");
+        // EmitStoredData(storedDataList);
+
+      }
+
+      @Override
+      public void onGetElectric(QNBleDevice device, int electric) {
+        String text = "收到电池电量百分比:" + electric;
+        Log.d("ConnectActivity", text);
+
+      }
+
+      // 测量过程中的连接状态
+      @Override
+      public void onScaleStateChange(QNBleDevice device, int status) {
+        Log.d("ConnectActivity", "秤的连接状态是:" + status);
+      }
+
+      @Override
+      public void onScaleEventChange(QNBleDevice device, int scaleEvent) {
+        Log.d("ConnectActivity", "秤返回的事件是:" + scaleEvent);
+
+      }
+
+      @Override
+      public void readSnComplete(QNBleDevice device, String sn) {
+
+      }
+
+      // get other health data
+      // @Override
+      // public void onGetHealthData(QNBleDevice device, QNScaleData healthData) {
+      //     Log.d("ConnectActivity", "收到健康数据");
+      //     healthData.getItemValue(QNIndicator.TYPE_BMI);
+      //     healthData.getItemValue(QNIndicator.TYPE_BMR);
+      //     healthData.getItemValue(QNIndicator.TYPE_BODY_AGE);
+      //     healthData.getItemValue(QNIndicator.TYPE_BODY_FAT);
+      //     healthData.getItemValue(QNIndicator.TYPE_BODY_WATER);
+      //     healthData.getItemValue(QNIndicator.TYPE_BONE_SALT);
+      //     healthData.getItemValue(QNIndicator.TYPE_FAT_FREE_WEIGHT);
+      //     healthData.getItemValue(QNIndicator.TYPE_FAT_WEIGHT);
+      //     healthData.getItemValue(QNIndicator.TYPE_MUSCLE_MASS);
+      //     healthData.getItemValue(QNIndicator.TYPE_MUSCLE_RATE);
+      //     healthData.getItemValue(QNIndicator.TYPE_PHYSICAGE);
+      //     healthData.getItemValue(QNIndicator.TYPE_PROTEIN);
+      //     healthData.getItemValue(QNIndicator.TYPE_SKELETAL_MUSCLE_RATE);
+      //     healthData.getItemValue(QNIndicator.TYPE_SUBFAT);
+      //     healthData.getItemValue(QNIndicator.TYPE_VISCERAL_FAT);
+      //     healthData.getItemValue(QNIndicator.TYPE_WEIGHT);
+
+      //     // emit
+      //     EmitHealthData(healthData);
+      // }
+
+
+    });
+
   }
 
   public void initialize() {
@@ -81,9 +206,6 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
       this.setConfig();
 
       this.initSDK();
-      this.setDiscoveryListener();
-      this.setConnectionListener();
-      this.setDataListener();
     }
 
     this.loaded = true;
@@ -109,7 +231,7 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
     mQNBleApi.initSdk("123456789", encryptPath, new QNResultCallback() {
       @Override
       public void onResult(int code, String msg) {
-        Log.d("BaseApplication", "Initialization file\n" + msg);
+        Log.d(TAG, "Initialization file\n" + msg);
       }
     });
   }
@@ -130,64 +252,30 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
   }
 
   private QNUser createQNUser() {
-    UserShape userShape;
-    switch (mUser.getChoseShape()) {
-      case 0:
-        userShape = UserShape.SHAPE_NONE;
-        break;
-      case 1:
-        userShape = UserShape.SHAPE_SLIM;
-        break;
-      case 2:
-        userShape = UserShape.SHAPE_NORMAL;
-        break;
-      case 3:
-        userShape = UserShape.SHAPE_STRONG;
-        break;
-      case 4:
-        userShape = UserShape.SHAPE_PLIM;
-        break;
-      default:
-        userShape = UserShape.SHAPE_NONE;
-        break;
+    UserShape userShape = UserShape.SHAPE_NORMAL;
+    ;
+    String dateString = "04/01/2001";
+    String dateFormatPattern = "MM/dd/yyyy";
+    SimpleDateFormat dateFormat = new SimpleDateFormat(dateFormatPattern);
+
+    UserGoal userGoal = UserGoal.GOAL_STAY_HEALTH;
+    Date date = new Date(0);
+
+    try {
+
+      date = dateFormat.parse(dateString);
+    } catch (Exception e) {
+
     }
 
-    UserGoal userGoal;
-    switch (mUser.getChoseGoal()) {
-      case 0:
-        userGoal = UserGoal.GOAL_NONE;
-        break;
-      case 1:
-        userGoal = UserGoal.GOAL_LOSE_FAT;
-        break;
-      case 2:
-        userGoal = UserGoal.GOAL_STAY_HEALTH;
-        break;
-      case 3:
-        userGoal = UserGoal.GOAL_GAIN_MUSCLE;
-        break;
-      case 4:
-        userGoal = UserGoal.POWER_OFTEN_EXERCISE;
-        break;
-      case 5:
-        userGoal = UserGoal.POWER_LITTLE_EXERCISE;
-        break;
-      case 6:
-        userGoal = UserGoal.POWER_OFTEN_RUN;
-        break;
-      default:
-        userGoal = UserGoal.GOAL_NONE;
-        break;
-    }
-
-    return mQNBleApi.buildUser(mUser.getUserId(),
-      mUser.getHeight(), mUser.getGender(), mUser.getBirthDay(), mUser.getAthleteType(),
-      userShape, userGoal, mUser.getClothesWeight(), new QNResultCallback() {
-        @Override
-        public void onResult(int code, String msg) {
-          Log.d("ConnectActivity", "Response:" + msg);
-        }
-      });
+    return mQNBleApi.buildUser("2345",
+            180, "male", date, QNInfoConst.CALC_ATHLETE,
+            userShape, userGoal, 20.0, new QNResultCallback() {
+              @Override
+              public void onResult(int code, String msg) {
+                Log.d(TAG, ":onResult" + msg);
+              }
+            });
   }
 
   @Override
@@ -209,17 +297,17 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
 
 
       mQNBleApi.buildUser(id,
-        height, gender, formattedBirthday, athleteType, new QNResultCallback() {
-          @Override
-          public void onResult(int code, String msg) {
-            Log.w("Build User", "Build User message:" + msg);
-          }
-        });
+              height, gender, formattedBirthday, athleteType, new QNResultCallback() {
+                @Override
+                public void onResult(int code, String msg) {
+                  Log.w(TAG, "Build User message:" + msg);
+                }
+              });
 
       QNConfig mQnConfig = mQNBleApi.getConfig();
       mQnConfig.setUnit(unit);
 
-      promise.resolve("build user success");
+      promise.resolve(true);
     } catch (IllegalViewOperationException | ParseException e) {
       promise.reject("build user reject", e);
     }
@@ -227,11 +315,11 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
 
   public static void verifyPermissions(Activity activity) {
     if (ContextCompat.checkSelfPermission(activity,
-      Manifest.permission.ACCESS_COARSE_LOCATION)
-      != PackageManager.PERMISSION_GRANTED) {
+            Manifest.permission.ACCESS_COARSE_LOCATION)
+            != PackageManager.PERMISSION_GRANTED) {
     }
     if (ActivityCompat.shouldShowRequestPermissionRationale(activity,
-      Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            Manifest.permission.ACCESS_COARSE_LOCATION)) {
     }
 
 
@@ -248,187 +336,119 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
     }
   }
 
-  public void setConnectionListener() {
-    final ReactApplicationContext context = getReactApplicationContext();
-    mQNBleApi.setBleConnectionChangeListener(new QNBleConnectionChangeListener() {
-      @Override
-      public void onConnecting(QNBleDevice device) {
-      }
-
-      @Override
-      public void onConnected(QNBleDevice device) {
-      }
-
-      @Override
-      public void onServiceSearchComplete(QNBleDevice device) {
-      }
-
-      //The connection is being disconnected. When the disconnection is called, it will be called back immediately.
-      @Override
-      public void onDisconnecting(QNBleDevice device) {
-      }
-
-      //Disconnect, callback after disconnect
-      @Override
-      public void onDisconnected(QNBleDevice device) {
-      }
-
-      //There was a connection error, please refer to the attached table for the error code
-      @Override
-      public void onConnectError(QNBleDevice device, int errorCode) {
-      }
-    });
-
-  };
-
   public void sendEventToJS(String eventName, @Nullable WritableMap params) {
     this.reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
   }
 
-  public void setDataListener() {
-
-    mQNBleApi.setDataListener(new QNScaleDataListener() {
-      public double convertWeight(Double weight) {
-        try {
-          double finalWeight = weight * 1000;
-          if (mQNBleApi.getConfig().getUnit() == QNUnit.WEIGHT_UNIT_LB) {
-            String convertedWeightAsString = mQNBleApi.convertWeightWithTargetUnit(weight,QNUnit.WEIGHT_UNIT_LB);
-            double pounds = Float.valueOf(convertedWeightAsString.split("lb")[0]);
-            double convertedWeight = 453.59237 * pounds;
-            finalWeight = convertedWeight;
-          }
-
-          return finalWeight;
-        } catch(IllegalViewOperationException e) {
-          return weight;
-        }
-
-      };
-
+  private void connectQnDevice(QNBleDevice device) {
+    mQNBleApi.connectDevice(device, createQNUser(), new QNResultCallback() {
       @Override
-      public void onGetUnsteadyWeight(QNBleDevice device, double weight) {
-        QNConfig mQnConfig = mQNBleApi.getConfig();
-        double finalWeight = convertWeight(weight);
-
-        WritableMap params = Arguments.createMap();
-        params.putDouble("weight", finalWeight);
-        params.putString("status", "sync");
-        reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("uploadProgress", params);
-      }
-
-      @Override
-      public void onGetScaleData(QNBleDevice device, QNScaleData data) {
-        WritableMap params = Arguments.createMap();
-        params.putString("status", "complete");
-
-        QNScaleItemData bmrValue = data.getItem(QNIndicator.TYPE_BMR);
-        if (bmrValue != null) {
-          Double value = bmrValue.getValue();
-          params.putDouble("basalMetabolicRate", value);
-        }
-
-        QNScaleItemData visceralFatValue = data.getItem(QNIndicator.TYPE_VISFAT);
-        if (visceralFatValue != null) {
-
-          Double value = visceralFatValue.getValue();
-          params.putDouble("visceralFatTanita", value);
-        }
-
-        QNScaleItemData weightValue = data.getItem(QNIndicator.TYPE_WEIGHT);
-        if (weightValue != null) {
-          double finalWeight = convertWeight(weightValue.getValue());
-
-          params.putDouble("weight", finalWeight);
-        }
-
-
-        QNScaleItemData leanMassValue = data.getItem(QNIndicator.TYPE_LBM);
-        if (leanMassValue != null) {
-          Double value = leanMassValue.getValue() * 1000;
-          params.putDouble("fatFreeMass", value);
-        }
-
-        QNScaleItemData bodyFatValue = data.getItem(QNIndicator.TYPE_BODYFAT);
-        if (bodyFatValue != null) {
-          Double value = bodyFatValue.getValue() * 1000;
-          params.putDouble("bodyFat", value);
-        }
-
-        QNScaleItemData hydrationValue = data.getItem(QNIndicator.TYPE_WATER);
-        if (hydrationValue != null) {
-          Double value = hydrationValue.getValue() * 1000;
-          params.putDouble("waterPercentage", value);
-        }
-
-        reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit("uploadProgress", params);
-      }
-
-      @Override
-      public void onGetStoredScale(QNBleDevice device, List<QNScaleStoreData> storedDataList) {
-      }
-
-      @Override
-      public void onGetElectric(QNBleDevice device, int electric) {
-      }
-
-      @Override
-      public void onScaleStateChange(QNBleDevice device, int status) {
-      }
-
-      @Override
-      public void onScaleEventChange(QNBleDevice qnBleDevice, int i) {
+      public void onResult(int code, String msg) {
+        Log.d("Device Status", code + msg);
       }
     });
+
+  }
+
+  private String initWeight(double weight) {
+    int unit = mQNBleApi.getConfig().getUnit();
+    return mQNBleApi.convertWeightWithTargetUnit(weight, unit);
+  }
+
+  private String initScaleDate(QNScaleData data) {
+    StringBuilder stringBuilder = new StringBuilder();
+    // stringBuilder.append("测量时间:" + data.getMeasureTime() + "\n");
+    // stringBuilder.append("用户ID:" + data.getUserId() + "\n");
+    // stringBuilder.append("测量结果:" + data.getScaleType() + "\n");
+    // stringBuilder.append("电量:" + data.getElectric() + "\n");
+    // stringBuilder.append("体重:" + data.getWeight() + "\n");
+    // stringBuilder.append("阻抗:" + data.getImpedance() + "\n");
+    // stringBuilder.append("年龄:" + data.getAge() + "\n");
+    // stringBuilder.append("身高:" + data.getHeight() + "\n");
+    // stringBuilder.append("性别:" + data.getSex() + "\n");
+    // stringBuilder.append("单位:" + data.getUnit() + "\n");
+    // stringBuilder.append("体重:" + data.getItemValue(QNIndicator.TYPE_WEIGHT) + "\n");
+    // stringBuilder.append("BMI:" + data.getItemValue(QNIndicator.TYPE_BMI) + "\n");
+    // stringBuilder.append("体脂率:" + data.getItemValue(QNIndicator.TYPE_BODY_FAT) + "\n");
+    // stringBuilder.append("去脂体重:" + data.getItemValue(QNIndicator.TYPE_FAT_FREE_WEIGHT) + "\n");
+    // stringBuilder.append("水分含量:" + data.getItemValue(QNIndicator.TYPE_BODY_WATER) + "\n");
+    // stringBuilder.append("肌肉量:" + data.getItemValue(QNIndicator.TYPE_MUSCLE_MASS) + "\n");
+    // stringBuilder.append("骨量:" + data.getItemValue(QNIndicator.TYPE_BONE_MASS) + "\n");
+    // stringBuilder.append("内脏脂肪等级:" + data.getItemValue(QNIndicator.TYPE_VISCERAL_FAT) + "\n");
+    // stringBuilder.append("基础代谢:" + data.getItemValue(QNIndicator.TYPE_BMR) + "\n");
+    // stringBuilder.append("身体年龄:" + data.getItemValue(QNIndicator.TYPE_BODY_AGE) + "\n");
+    // stringBuilder.append("蛋白质:" + data.getItemValue(QNIndicator.TYPE_PROTEIN) + "\n");
+    // stringBuilder.append("骨骼肌率:" + data.getItemValue(QNIndicator.TYPE_SKELETAL_MUSCLE_RATE) + "\n");
+    // stringBuilder.append("脂肪率:" + data.getItemValue(QNIndicator.TYPE_BODY_FAT_RATE) + "\n");
+    // stringBuilder.append("皮下脂肪率:" + data.getItemValue(QNIndicator.TYPE_SUBCUTANEOUS_FAT) + "\n");
+    // stringBuilder.append("体型:" + data.getItemValue(QNIndicator.TYPE_BODY_SHAPE) + "\n");
+    // stringBuilder.append("健康得分:" + data.getItemValue(QNIndicator.TYPE_HEALTH_SCORE) + "\n");
+    // stringBuilder.append("肌肉得分:" + data.getItemValue(QNIndicator.TYPE_MUSCLE_SCORE) + "\n");
+    // stringBuilder.append("体重得分:" + data.getItemValue(QNIndicator.TYPE_WEIGHT_SCORE) + "\n");
+    // stringBuilder.append("脂肪得分:" + data.getItemValue(QNIndicator.TYPE_FAT_SCORE) + "\n");
+    // stringBuilder.append("水分得分:" + data.getItemValue(QNIndicator.TYPE_WATER_SCORE) + "\n");
+    // stringBuilder.append("骨量得分:" + data.getItemValue(QNIndicator.TYPE_BONE_SCORE) + "\n");
+    // stringBuilder.append("蛋白质得分:" + data.getItemValue(QNIndicator.TYPE_PROTEIN_SCORE) + "\n");
+    // stringBuilder.append("身体年龄得分:" + data.getItemValue(QNIndicator.TYPE_BODY_AGE_SCORE) + "\n");
+    // stringBuilder.append("内脏脂肪得分:" + data.getItemValue(QNIndicator.TYPE_VISCERAL_FAT_SCORE) + "\n");
+    // stringBuilder.append("蛋白质率:" + data.getItemValue(QNIndicator.TYPE_PROTEIN_RATE) + "\n");
+    // stringBuilder.append("骨骼肌率:" + data.getItemValue(QNIndicator.TYPE_SKELETAL_MUSCLE_RATE) + "\n");
+    // stringBuilder.append("脂肪率:" + data.getItemValue(QNIndicator.TYPE_BODY_FAT_RATE) + "\n");
+    // stringBuilder.append("皮下脂肪率:" + data.getItemValue(QNIndicator.TYPE_SUBCUTANEOUS_FAT) + "\n");
+    // stringBuilder.append("体型:" + data.getItemValue(QNIndicator.TYPE_BODY_SHAPE) + "\n");
+    // stringBuilder.append("健康得分:" + data.getItemValue(QNIndicator.TYPE_HEALTH_SCORE) + "\n");
+    // stringBuilder.append("肌肉得分:" + data.getItemValue(QNIndicator.TYPE_MUSCLE_SCORE) + "\n");
+    // stringBuilder.append("体重得分:" + data.getItemValue(QNIndicator.TYPE_WEIGHT_SCORE) + "\n");
+
+    return stringBuilder.toString();
   }
 
 
-  public void setDiscoveryListener() {
-    mQNBleApi.setBleDeviceDiscoveryListener(new QNBleDeviceDiscoveryListener() {
+
+  @ReactMethod
+  public void initBleConnectStatus() {
+
+    Log.d(TAG, "Intialised from React Native");
+    this.mQNBleApi.setBleConnectionChangeListener(new QNBleConnectionChangeListener() {
       @Override
-      public void onDeviceDiscover(QNBleDevice device) {
-        mQNBleApi.connectDevice(device, createQNUser(), new QNResultCallback() {
-          @Override
-          public void onResult(int code, String msg) {
-            Log.d("onResult", "afdasf:" + msg);
-          }
-        });
+      public void onConnecting(QNBleDevice device) {
+        Log.d(TAG, "Connecting");
+      }
+
+      @Override
+      public void onConnected(QNBleDevice device) {
+        Log.d(TAG, "Connected");
 
       }
 
       @Override
-      public void onStartScan() {
-//        QNLogUtils.log("ScanActivity", "onStartScan");
-//        isScanning = true;
+      public void onServiceSearchComplete(QNBleDevice device) {
+        Log.d(TAG, "Search COmplete");
       }
 
       @Override
-      public void onStopScan() {
-        mQNBleApi.stopBleDeviceDiscovery(new QNResultCallback() {
-          @Override
-          public void onResult(int code, String msg) {
-            if (code == CheckStatus.OK.getCode()) {
-            }
-          }
-        });
+      public void onDisconnecting(QNBleDevice device) {
+        Log.d(TAG, "Disconnecting");
       }
 
       @Override
-      public void onScanFail(int code) {
-        Log.w("Scale", "onScanFail");
+      public void onDisconnected(QNBleDevice device) {
+        Log.d(TAG, "Disconnected");
       }
 
       @Override
-      public void onBroadcastDeviceDiscover(QNBleBroadcastDevice qnBleBroadcastDevice) {
-        Log.w("Scale", "onBroadcastDeviceDiscover");
-
+      public void onConnectError(QNBleDevice device, int errorCode) {
+        Log.d(TAG, "onConnectError:" + errorCode);
       }
 
       @Override
-      public void onKitchenDeviceDiscover(QNBleKitchenDevice qnBleKitchenDevice) {
-        Log.w("Scale", "onKitchenDeviceDiscover");
+      public void onStartInteracting(QNBleDevice device) {
+
       }
+
     });
   }
+
 
   @ReactMethod
   public void onStartDiscovery(String name, final Promise promise) {
@@ -464,6 +484,56 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
       }
     });
     // TODO: Implement some actually useful functionality
-    
+
   }
+
+  @ReactMethod
+  public void startScan() {
+    mQNBleApi.setBleDeviceDiscoveryListener(new QNBleDeviceDiscoveryListener() {
+      @Override
+      public void onDeviceDiscover(QNBleDevice device) {
+        // devices.add(device);
+        Log.d(TAG, device.getDeviceType() + "----" + QNDeviceType.USER_SCALE);
+        mBleDevice = device;
+        connectQnDevice(device);
+
+        stopScan();
+      }
+
+      @Override
+      public void onStartScan() {
+        Log.e(TAG, "onStartScan");
+      }
+
+      @Override
+      public void onStopScan() {
+        Log.e(TAG, "onStopScan");
+
+      }
+
+      @Override
+      public void onScanFail(int code) {
+        Log.e(TAG, "onScanFail:" + code);
+
+      }
+
+      @Override
+      public void onBroadcastDeviceDiscover(QNBleBroadcastDevice device) {
+      }
+
+      @Override
+      public void onKitchenDeviceDiscover(QNBleKitchenDevice device) {
+        if (device.isBluetooth()) {
+
+        }
+      }
+    });
+    mQNBleApi.startBleDeviceDiscovery(new QNResultCallback() {
+      @Override
+      public void onResult(int code, String msg) {
+        Log.d(TAG, "code:" + code + ";msg:" + msg);
+      }
+    });
+  }
+
 }

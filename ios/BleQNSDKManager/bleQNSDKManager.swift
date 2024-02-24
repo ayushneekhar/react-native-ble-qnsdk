@@ -17,7 +17,7 @@ public class QNSDKManager : RCTEventEmitter {
     var scaleDataAry: [AnyHashable] = []
     
     override public func supportedEvents() -> [String]! {
-        return ["uploadProgress"]
+        return ["onHealthData", "deviceDisconnected", "deviceConnected", "connectionError"]
     }
     
     
@@ -37,7 +37,7 @@ public class QNSDKManager : RCTEventEmitter {
     rejecter reject: RCTPromiseRejectBlock) {
         let dateStr = birthday
         let dateFormat = DateFormatter()
-        dateFormat.dateFormat = "yyyy/MM/dd"
+        dateFormat.dateFormat = "dd-MM-yyyy"
         let date = dateFormat.date(from: dateStr)
         
         self.user = bleApi.buildUser(id, height: Int32(height), gender: gender, birthday: date, callback: { error in
@@ -121,7 +121,6 @@ public class QNSDKManager : RCTEventEmitter {
 
 extension QNSDKManager: QNBleDeviceDiscoveryListener {
     public func onStartScan() {
-        print("On start scan")
     }
     
     public func onDeviceDiscover(_ device: QNBleDevice!) {
@@ -132,10 +131,23 @@ extension QNSDKManager: QNBleDeviceDiscoveryListener {
 }
 
 extension QNSDKManager: QNBleConnectionChangeListener {
+    public func onDisconnected(_ device: QNBleDevice!) {
+        let statusObject: [String: Any] = [
+            "status": "disconnected"
+        ]
+        
+        self.sendEvent(withName: "deviceDisconnected", body: statusObject )
+    }
+
     public func onConnecting(_ device: QNBleDevice!) {
     }
     
     public func onConnected(_ device: QNBleDevice!) {
+        let statusObject: [String: Any] = [
+            "status": "connected"
+        ]
+        
+        self.sendEvent(withName: "deviceConnected", body: statusObject )
     }
     
     public func onServiceSearchComplete(_ device: QNBleDevice!) {
@@ -149,7 +161,7 @@ extension QNSDKManager: QNBleConnectionChangeListener {
             "status": "error"
         ]
         
-        self.sendEvent(withName: "uploadProgress", body: errorObject )
+        self.sendEvent(withName: "connectionError", body: errorObject )
     }
     
 }
@@ -170,41 +182,46 @@ extension QNSDKManager: QNScaleDataListener {
             "weight": finalWeight
         ]
         
-        self.sendEvent(withName: "uploadProgress", body: jsonObject )
+        self.sendEvent(withName: "onHealthData", body: jsonObject )
     }
     
     public func filterResponse(_ scaleData: [QNScaleItemData]) -> [String:Any]? {
         var response = [String:Any]()
         for item in scaleData {
-            
-            if (item.name == "BMR") {
-                response["basalMetabolicRate"] = item.value
-            }
-            if (item.name == "visceral fat") {
-                response["visceralFatTanita"] = item.value
-            }
-            if (item.name == "weight") {
-                var finalWeight = item.value * 1000
-                
-                // In order to have the same value for lb's in the app we must convert from lb's to grams
+            switch item.type {
+            case QNScaleType.BMI:
+                response["bmi"] = item.value
+            case QNScaleType.bodyFatRate:
+                response["bodyFat"] = item.value
+            case QNScaleType.BMR:
+                response["bmr"] = item.value:
+            case QNScaleType.visceralFat: 
+                response["visceralFat"] = item.value
+            case QNScaleType.bodyWaterRate:
+                response["bodyWater"] = item.value
+            case QNScaleType.muscleMass:
+                response["muscleMass"] = item.value
+            case QNScaleType.boneMass:
+                response["boneMass"] = item.value
+            case QNScaleType.skeletalMuscleMass:
+                response["skeletalMuscleMass"] = item.value
+            case QNScaleType.protein:
+                response["protein"] = item.value
+            case QNScaleType.metabolicAge:
+                response["metabolicAge"] = item.value
+            case QNScaleType.subcutaneousFat:
+                response["subcutaneousFat"] = item.value
+            case QNScaleType.weight:
+                var finalWeight = weight * 1000
                 if (bleApi.getConfig().unit == QNUnit.LB) {
-                    let pounds = bleApi.convertWeight(withTargetUnit: item.value, unit: QNUnit.LB)
+                    let pounds = bleApi.convertWeight(withTargetUnit: weight, unit: QNUnit.LB)
                     let convertedWeight = 453.59237 * pounds
                     finalWeight = convertedWeight
                 }
-                
                 response["weight"] = finalWeight
+            default:
+                print("No match")                
             }
-            if (item.name == "lean body weight") {
-                response["fatFreeMass"] = (item.value * 1000)
-            }
-            if (item.name == "body fat rate") {
-                response["bodyFat"] = (item.value * 1000)
-            }
-            if (item.name == "body water rate") {
-                response["waterPercentage"] = (item.value * 1000)
-            }
-            
         }
         
         return response
@@ -214,7 +231,7 @@ extension QNSDKManager: QNScaleDataListener {
         var data = self.filterResponse(scaleData.getAllItem())
         data?["status"] = "complete"
         
-        self.sendEvent(withName: "uploadProgress", body: data )
+        self.sendEvent(withName: "onHealthData", body: data )
     }
     
     public func onGetStoredScale(_ device: QNBleDevice!, data storedDataList: [QNScaleStoreData]!) {
@@ -224,37 +241,30 @@ extension QNSDKManager: QNScaleDataListener {
     }
     
     public func onScaleStateChange(_ device: QNBleDevice!, scaleState state: QNScaleState) {
-        if (state.rawValue == -1) {
+        switch state {
+        case .linkLoss:
             print("onScaleStateChange -- QNScaleStateLinkLoss")
-        }
-        else if (state.rawValue == 0){
-            print("onScaleStateChange - QNScaleStateDisconnected")
-        }else if (state.rawValue == 1){
-            print("onScaleStateChange - QNScaleStateConnected")
+        case .disconnected:
+            print("onScaleStateChange -- QNScaleStateDisconnected")
+        case .connected:
+            print("onScaleStateChange -- QNScaleStateConnected")
             let statusObject: [String: Any] = [
                 "status": "connected"
             ]
-            
-            self.sendEvent(withName: "uploadProgress", body: statusObject )
+            self.sendEvent(withName: "onHealthData", body: statusObject )
+        case .connecting:
+            print("onScaleStateChange -- QNScaleStateConnecting")
+        case .disconnecting:
+            print("onScaleStateChange -- QNScaleStateDisconnecting")
+        case .startMeasure:
+            print("onScaleStateChange -- QNScaleStateStartMeasure")
+        case .realTime:
+            print("onScaleStateChange -- QNScaleStateRealTime")
+        case .measureCompleted:
+            print("onScaleStateChange -- QNScaleStateMeasureCompleted")
+        default:
+            print("onScaleStateChange -- QNScaleStateUnknown")
         }
-        else if (state.rawValue == 2){
-           print("onScaleStateChange - QNScaleStateConnecting")
-        }
-        else if (state.rawValue == 3){
-            print("onScaleStateChange - QNScaleStateDisconnecting")
-        }
-        else if (state.rawValue == 4){
-           print("onScaleStateChange - QNScaleStateStartMeasure")
-        }
-        else if (state.rawValue == 5){
-           print("onScaleStateChange - QNScaleStateRealTime")
-        }
-        else if (state.rawValue == 9){
-            print("onScaleStateChange - QNScaleStateMeasureCompleted")
-        }
-   
-        
-
     }
     
     public func onScaleEventChange(_ device: QNBleDevice!, scaleEvent: QNScaleEvent) {

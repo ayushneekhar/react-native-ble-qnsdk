@@ -2,10 +2,9 @@ package com.coachcare;
 
 import android.Manifest;
 import android.app.Activity;
-import android.app.ActivityManager;
+import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Handler;
-import android.text.format.DateUtils;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -13,7 +12,6 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
 import com.facebook.react.bridge.Arguments;
-import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
@@ -21,46 +19,37 @@ import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-import com.facebook.react.uimanager.IllegalViewOperationException;
-
-import com.coachcare.User;
-
-import com.qingniu.qnble.utils.QNLogUtils;
-import com.yolanda.health.qnblesdk.constant.QNUnit;
-import com.yolanda.health.qnblesdk.listener.QNBleConnectionChangeListener;
-import com.yolanda.health.qnblesdk.listener.QNScaleDataListener;
-import com.yolanda.health.qnblesdk.listener.QNResultCallback;
-import com.yolanda.health.qnblesdk.out.QNBleApi;
-import com.yolanda.health.qnblesdk.constant.CheckStatus;
-import com.yolanda.health.qnblesdk.constant.QNIndicator;
-import com.yolanda.health.qnblesdk.constant.UserGoal;
-import com.yolanda.health.qnblesdk.constant.UserShape;
-import com.yolanda.health.qnblesdk.listener.QNBleDeviceDiscoveryListener;
-import com.yolanda.health.qnblesdk.listener.QNResultCallback;
-import com.yolanda.health.qnblesdk.out.QNBleApi;
-import com.yolanda.health.qnblesdk.out.QNBleBroadcastDevice;
-import com.yolanda.health.qnblesdk.out.QNBleDevice;
-import com.yolanda.health.qnblesdk.out.QNBleKitchenDevice;
-import com.yolanda.health.qnblesdk.out.QNConfig;
-import com.yolanda.health.qnblesdk.out.QNScaleData;
-import com.yolanda.health.qnblesdk.out.QNScaleItemData;
-import com.yolanda.health.qnblesdk.out.QNScaleStoreData;
-import com.yolanda.health.qnblesdk.out.QNShareData;
-import com.yolanda.health.qnblesdk.out.QNUser;
-import com.yolanda.health.qnblesdk.out.QNUtils;
-import com.yolanda.health.qnblesdk.out.QNWiFiConfig;
-
-import java.text.ParseException;
+import com.qingniu.scale.model.BleScaleData;
+import com.qn.device.constant.CheckStatus;
+import com.qn.device.constant.QNDeviceType;
+import com.qn.device.constant.QNIndicator;
+import com.qn.device.constant.QNInfoConst;
+import com.qn.device.constant.UserGoal;
+import com.qn.device.constant.UserShape;
+import com.qn.device.listener.QNBleConnectionChangeListener;
+import com.qn.device.listener.QNBleDeviceDiscoveryListener;
+import com.qn.device.listener.QNResultCallback;
+import com.qn.device.listener.QNScaleDataListener;
+import com.qn.device.out.QNBleApi;
+import com.qn.device.out.QNBleBroadcastDevice;
+import com.qn.device.out.QNBleDevice;
+import com.qn.device.out.QNBleKitchenDevice;
+import com.qn.device.out.QNConfig;
+import com.qn.device.out.QNScaleData;
+import com.qn.device.out.QNScaleStoreData;
+import com.qn.device.out.QNUser;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.List;
 
 
-public class BleQnsdkModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
+public class BleQnsdkModule extends ReactContextBaseJavaModule {
 
   private final String TAG=BleQnsdkModule.class.getSimpleName();
+  private QNBleDevice mBleDevice;
 
   private final Context mContext;
+
   private final ReactApplicationContext reactContext;
   private QNBleApi mQNBleApi;
   public User mUser = new User();
@@ -68,9 +57,9 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
   public static final String FORMAT_SHORT = "yyyy-MM-dd";
 
   public void EmitData(double weight) {
-    if (eventContext != null) {
+    if (reactContext != null) {
 
-      eventContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+      reactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
               .emit("onStop", weight);
     }
   }
@@ -108,7 +97,7 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
   public BleQnsdkModule(ReactApplicationContext reactContext) {
     super(reactContext);
     this.mContext = reactContext.getApplicationContext();
-    this.eventContext = reactContext;
+    this.reactContext = reactContext;
     mQNBleApi = QNBleApi.getInstance(this.mContext);
     initBleConnectStatus();
     mQNBleApi.setDataListener(new QNScaleDataListener() {
@@ -198,18 +187,28 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
 
   }
 
-  public void initialize() {
-
-    if (this.loaded == false) {
-      final ReactApplicationContext context = getReactApplicationContext();
-      mQNBleApi = QNBleApi.getInstance(context);
-      this.setConfig();
-
-      this.initSDK();
-    }
-
-    this.loaded = true;
+  public static void initPackage(Context context, String encryptPath){
+    QNBleApi qnBle = QNBleApi.getInstance(context);
+    qnBle.initSdk("123456789", encryptPath, new QNResultCallback() {
+      @Override
+      public void onResult(int code, String msg) {
+        Log.d("OnResult INIT", "Initialization file\n" + msg);
+      }
+    });
   }
+
+//  public void initialize() {
+//    if (this.loaded == false) {
+//      final Context context = getReactApplicationContext().getApplicationContext();
+//      mQNBleApi = QNBleApi.getInstance(context);
+//      this.setConfig();
+//
+//      this.initSDK();
+//    }
+//    this.loaded = true;
+//  }
+//
+
 
   public void setConfig() {
     QNConfig mQnConfig = mQNBleApi.getConfig();
@@ -226,34 +225,33 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
     });
   }
 
-  public void initSDK() {
-    String encryptPath = "file:///android_asset/123456789.qn";
-    mQNBleApi.initSdk("123456789", encryptPath, new QNResultCallback() {
-      @Override
-      public void onResult(int code, String msg) {
-        Log.d(TAG, "Initialization file\n" + msg);
-      }
-    });
-  }
-
-  @Override
-  public void onHostResume() {
-    this.initialize();
-  }
-
-  @Override
-  public void onHostPause() {
-    Log.w("Scale", "on onHostPause");
-  }
-
-  @Override
-  public void onHostDestroy() {
-    Log.w("S", "on onHostDestroy");
-  }
+//  public void initSDK() {
+//    String encryptPath = "file:///android_asset/123456789.qn";
+//    mQNBleApi.initSdk("123456789", encryptPath, new QNResultCallback() {
+//      @Override
+//      public void onResult(int code, String msg) {
+//        Log.d(TAG, "Initialization file\n" + msg);
+//      }
+//    });
+//  }
+//
+//  @Override
+//  public void onHostResume() {
+//    this.initialize();
+//  }
+//
+//  @Override
+//  public void onHostPause() {
+//    Log.w("Scale", "on onHostPause");
+//  }
+//
+//  @Override
+//  public void onHostDestroy() {
+//    Log.w("S", "on onHostDestroy");
+//  }
 
   private QNUser createQNUser() {
     UserShape userShape = UserShape.SHAPE_NORMAL;
-    ;
     String dateString = "04/01/2001";
     String dateFormatPattern = "MM/dd/yyyy";
     SimpleDateFormat dateFormat = new SimpleDateFormat(dateFormatPattern);
@@ -281,36 +279,6 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
   @Override
   public String getName() {
     return "QNSDKManager";
-  }
-
-  @ReactMethod
-  public void buildUser(String name, String birthday, int height, String gender, String id, int unit, int athleteType, Promise promise) {
-    try {
-      SimpleDateFormat sdf = new SimpleDateFormat(FORMAT_SHORT); // here set the pattern as you date in string was containing like date/month/year
-      Date formattedBirthday = sdf.parse(birthday);
-
-      this.mUser.setAthleteType(athleteType);
-      this.mUser.setBirthDay(formattedBirthday);
-      this.mUser.setGender(gender);
-      this.mUser.setHeight(height);
-      this.mUser.setUserId(id);
-
-
-      mQNBleApi.buildUser(id,
-              height, gender, formattedBirthday, athleteType, new QNResultCallback() {
-                @Override
-                public void onResult(int code, String msg) {
-                  Log.w(TAG, "Build User message:" + msg);
-                }
-              });
-
-      QNConfig mQnConfig = mQNBleApi.getConfig();
-      mQnConfig.setUnit(unit);
-
-      promise.resolve(true);
-    } catch (IllegalViewOperationException | ParseException e) {
-      promise.reject("build user reject", e);
-    }
   }
 
   public static void verifyPermissions(Activity activity) {
@@ -486,6 +454,16 @@ public class BleQnsdkModule extends ReactContextBaseJavaModule implements Lifecy
     // TODO: Implement some actually useful functionality
 
   }
+
+  private void stopScan() {
+    mQNBleApi.stopBleDeviceDiscovery(new QNResultCallback() {
+      @Override
+      public void onResult(int code, String msg) {
+        Log.d("dwkajowq", "Scan Stoopedd");
+      }
+    });
+  }
+
 
   @ReactMethod
   public void startScan() {

@@ -194,7 +194,7 @@ extension QNSDKManager: QNScaleDataListener {
             case QNScaleType.bodyFatRate:
                 response["bodyFat"] = item.value
             case QNScaleType.BMR:
-                response["bmr"] = item.value:
+                response["bmr"] = item.value
             case QNScaleType.visceralFat: 
                 response["visceralFat"] = item.value
             case QNScaleType.bodyWaterRate:
@@ -212,9 +212,9 @@ extension QNSDKManager: QNScaleDataListener {
             case QNScaleType.subcutaneousFat:
                 response["subcutaneousFat"] = item.value
             case QNScaleType.weight:
-                var finalWeight = weight * 1000
+                var finalWeight = item.value * 1000
                 if (bleApi.getConfig().unit == QNUnit.LB) {
-                    let pounds = bleApi.convertWeight(withTargetUnit: weight, unit: QNUnit.LB)
+                    let pounds = bleApi.convertWeight(withTargetUnit: item.value, unit: QNUnit.LB)
                     let convertedWeight = 453.59237 * pounds
                     finalWeight = convertedWeight
                 }

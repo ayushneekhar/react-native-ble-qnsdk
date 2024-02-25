@@ -13,7 +13,7 @@ class BleQnsdkManager {
 
     buildUser(user) {
         return new Promise((fulfill, reject) => {
-            this.birthday = user && user.birthday || "1986/10/09"
+            this.birthday = user && user.birthday || "24-02-2001"
             this.gender = user && user.gender || "female"
             this.id = user && user.id || "1"
             this.height = user && user.height || 85
